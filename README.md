@@ -1,4 +1,4 @@
-# TaskFlow Pro — Aplicación TodoList (Evaluación 1 Desarrollo Móvil)
+# TaskFlow Pro — Aplicación TodoList (Evaluación 2 Desarrollo Móvil)
 
 Aplicación móvil híbrida y responsiva de gestión de tareas y productividad personal desarrollada con **Ionic Framework**, **Angular Standalone Components** y **Capacitor**. Diseñada para ofrecer una experiencia de usuario moderna, fluida y con persistencia de datos local.
 
@@ -8,17 +8,18 @@ Aplicación móvil híbrida y responsiva de gestión de tareas y productividad p
 
 La aplicación se encuentra compilada y publicada en producción mediante GitHub Actions en el siguiente enlace:
 
-**[https://aerodriguezc1984.github.io/TodoList/](https://aerodriguezc1984.github.io/TodoList/)**
+
 
 ---
 
 ## Información del Estudiante y Proyecto
 
 - **Estudiante:** Andrés Rodríguez Carrasco
+- **Estudiante:** Felipe Rodríguez Carrasco
 - **Correo Institucional:** andres.rodriguez.carrasco@estudiante.ipss.cl
 - **Institución:** Instituto Profesional San Sebastián (IPSS)
-- **Asignatura:** Desarrollo Mobile (Evaluación 1)
-- **Repositorio GitHub:** [https://github.com/aerodriguezc1984/TodoList](https://github.com/aerodriguezc1984/TodoList)
+- **Asignatura:** Desarrollo Mobile (Evaluación 2)
+- **Repositorio GitHub:** https://github.com/aerodriguezc1984/evaluacion_2_mobile/ 
 
 ---
 
