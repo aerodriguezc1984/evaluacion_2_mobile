@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject } from '@angular/core';
+import { Component, Input, OnInit, inject, signal, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
@@ -15,7 +15,8 @@ import {
   IonSpinner,
   ModalController,
   ToastController,
-  AlertController
+  AlertController,
+  ActionSheetController
 } from '@ionic/angular';
 import { addIcons } from 'ionicons';
 import {
@@ -38,8 +39,10 @@ import {
   trashOutline,
   alertCircleOutline,
   checkmarkCircleOutline,
-  pinOutline
+  pinOutline,
+  cloudUploadOutline
 } from 'ionicons/icons';
+import { CameraSource } from '@capacitor/camera';
 import { Task, TaskCategory, TaskLocation, TaskPriority } from '../../models/task.model';
 import { CameraService } from '../../services/camera.service';
 import { LocationService } from '../../services/location.service';
@@ -72,16 +75,19 @@ export class TaskModalComponent implements OnInit {
   private modalCtrl = inject(ModalController);
   private toastCtrl = inject(ToastController);
   private alertCtrl = inject(AlertController);
+  private actionSheetCtrl = inject(ActionSheetController);
   private cameraService = inject(CameraService);
   private locationService = inject(LocationService);
+  private ngZone = inject(NgZone);
+  private cdr = inject(ChangeDetectorRef);
 
   taskForm!: FormGroup;
 
-  // Estado de periféricos
-  photoUrl?: string;
-  location?: TaskLocation;
-  isCapturingPhoto = false;
-  isCapturingLocation = false;
+  // Estado reactivo con Signals (asegura actualización inmediata del DOM en Angular 22)
+  photoUrl = signal<string | undefined>(undefined);
+  location = signal<TaskLocation | undefined>(undefined);
+  isCapturingPhoto = signal<boolean>(false);
+  isCapturingLocation = signal<boolean>(false);
 
   readonly categories: { name: TaskCategory; icon: string; color: string }[] = [
     { name: 'Trabajo', icon: 'briefcase-outline', color: '#6366f1' },
@@ -119,7 +125,8 @@ export class TaskModalComponent implements OnInit {
       trashOutline,
       alertCircleOutline,
       checkmarkCircleOutline,
-      pinOutline
+      pinOutline,
+      cloudUploadOutline
     });
   }
 
@@ -133,8 +140,8 @@ export class TaskModalComponent implements OnInit {
     });
 
     if (this.task) {
-      this.photoUrl = this.task.photoUrl;
-      this.location = this.task.location;
+      this.photoUrl.set(this.task.photoUrl);
+      this.location.set(this.task.location);
     }
   }
 
@@ -151,48 +158,169 @@ export class TaskModalComponent implements OnInit {
     this.taskForm.patchValue({ priority });
   }
 
-  // --- PERIFÉRICO: CÁMARA ---
-  async capturePhoto() {
-    this.isCapturingPhoto = true;
+  // --- PERIFÉRICO: CÁMARA CON MENÚ DE OPCIONES ---
+  async presentPhotoOptions() {
+    const actionSheet = await this.actionSheetCtrl.create({
+      header: 'Evidencia Fotográfica',
+      buttons: [
+        {
+          text: 'Tomar foto con la cámara',
+          icon: 'camera-outline',
+          handler: () => {
+            this.capturePhoto(CameraSource.Camera);
+          }
+        },
+        {
+          text: 'Elegir desde la galería / archivo',
+          icon: 'image-outline',
+          handler: () => {
+            this.capturePhoto(CameraSource.Photos);
+          }
+        },
+        {
+          text: 'Cancelar',
+          icon: 'close-outline',
+          role: 'cancel'
+        }
+      ]
+    });
+
+    await actionSheet.present();
+  }
+
+  async capturePhoto(source: CameraSource = CameraSource.Prompt) {
+    // Activar spinner dentro de NgZone para renderizado inmediato
+    this.ngZone.run(() => {
+      this.isCapturingPhoto.set(true);
+      this.cdr.detectChanges();
+    });
+
+    // Timer de seguridad: desactiva el spinner en 10s máximo si el hardware no responde
+    const safetyTimer = setTimeout(() => {
+      this.ngZone.run(() => {
+        if (this.isCapturingPhoto()) {
+          this.isCapturingPhoto.set(false);
+          this.cdr.detectChanges();
+        }
+      });
+    }, 10000);
+
     try {
-      const result = await this.cameraService.capturePhoto();
-      if (result.dataUrl) {
-        this.photoUrl = result.dataUrl;
-        await this.showToast('Foto adjuntada exitosamente', 'success');
-      } else if (result.error) {
-        await this.showErrorAlert('Permiso de Cámara', result.error);
-      }
+      const result = await this.cameraService.capturePhoto(source);
+
+      this.ngZone.run(() => {
+        clearTimeout(safetyTimer);
+        this.isCapturingPhoto.set(false);
+
+        if (result.dataUrl) {
+          this.photoUrl.set(result.dataUrl);
+          this.showToast('Foto adjuntada exitosamente', 'success');
+        } else if (result.error) {
+          this.showErrorAlert('Permiso de Cámara', result.error);
+        }
+        this.cdr.detectChanges();
+      });
     } catch (e: any) {
-      await this.showToast('No se pudo abrir la cámara', 'danger');
-    } finally {
-      this.isCapturingPhoto = false;
+      this.ngZone.run(() => {
+        clearTimeout(safetyTimer);
+        this.isCapturingPhoto.set(false);
+        this.showToast('No se pudo abrir la cámara o fue cancelado', 'warning');
+        this.cdr.detectChanges();
+      });
+    }
+  }
+
+  /**
+   * Fallback nativo HTML para navegadores web de escritorio o móviles
+   */
+  onFileSelected(event: Event) {
+    const target = event.target as HTMLInputElement;
+    if (target && target.files && target.files.length > 0) {
+      const file = target.files[0];
+      const reader = new FileReader();
+
+      this.ngZone.run(() => {
+        this.isCapturingPhoto.set(true);
+        this.cdr.detectChanges();
+      });
+
+      reader.onload = () => {
+        this.ngZone.run(() => {
+          this.photoUrl.set(reader.result as string);
+          this.isCapturingPhoto.set(false);
+          this.showToast('Foto cargada exitosamente', 'success');
+          this.cdr.detectChanges();
+        });
+      };
+
+      reader.onerror = () => {
+        this.ngZone.run(() => {
+          this.isCapturingPhoto.set(false);
+          this.showToast('Error al leer el archivo seleccionado', 'danger');
+          this.cdr.detectChanges();
+        });
+      };
+
+      reader.readAsDataURL(file);
     }
   }
 
   removePhoto() {
-    this.photoUrl = undefined;
+    this.ngZone.run(() => {
+      this.photoUrl.set(undefined);
+      this.cdr.detectChanges();
+    });
   }
 
   // --- PERIFÉRICO: GPS / UBICACIÓN ---
   async captureLocation() {
-    this.isCapturingLocation = true;
+    // Activar spinner inmediatamente dentro de NgZone
+    this.ngZone.run(() => {
+      this.isCapturingLocation.set(true);
+      this.cdr.detectChanges();
+    });
+
+    // Timer de seguridad: desactiva el spinner en 8s máximo para evitar cargas infinitas
+    const safetyTimer = setTimeout(() => {
+      this.ngZone.run(() => {
+        if (this.isCapturingLocation()) {
+          this.isCapturingLocation.set(false);
+          this.showToast('Tiempo de espera agotado al consultar GPS', 'warning');
+          this.cdr.detectChanges();
+        }
+      });
+    }, 8000);
+
     try {
       const result = await this.locationService.getCurrentLocation(true);
-      if (result.location) {
-        this.location = result.location;
-        await this.showToast('Ubicación GPS registrada correctamente', 'success');
-      } else if (result.error) {
-        await this.showErrorAlert('Permiso de GPS', result.error);
-      }
+
+      this.ngZone.run(() => {
+        clearTimeout(safetyTimer);
+        this.isCapturingLocation.set(false);
+
+        if (result.location) {
+          this.location.set(result.location);
+          this.showToast('Ubicación GPS fijada exitosamente', 'success');
+        } else if (result.error) {
+          this.showErrorAlert('Acceso a GPS', result.error);
+        }
+        this.cdr.detectChanges();
+      });
     } catch (e: any) {
-      await this.showToast('No se pudo obtener la posición GPS', 'danger');
-    } finally {
-      this.isCapturingLocation = false;
+      this.ngZone.run(() => {
+        clearTimeout(safetyTimer);
+        this.isCapturingLocation.set(false);
+        this.showToast('No se pudo obtener la posición GPS', 'danger');
+        this.cdr.detectChanges();
+      });
     }
   }
 
   removeLocation() {
-    this.location = undefined;
+    this.ngZone.run(() => {
+      this.location.set(undefined);
+      this.cdr.detectChanges();
+    });
   }
 
   cancel() {
@@ -214,15 +342,15 @@ export class TaskModalComponent implements OnInit {
         category: formValues.category,
         priority: formValues.priority,
         dueDate: formValues.dueDate || undefined,
-        photoUrl: this.photoUrl,
-        location: this.location
+        photoUrl: this.photoUrl(),
+        location: this.location()
       };
       return this.modalCtrl.dismiss(updatedTask, 'confirm');
     } else {
       const newTaskData = {
         ...formValues,
-        photoUrl: this.photoUrl,
-        location: this.location
+        photoUrl: this.photoUrl(),
+        location: this.location()
       };
       return this.modalCtrl.dismiss(newTaskData, 'confirm');
     }

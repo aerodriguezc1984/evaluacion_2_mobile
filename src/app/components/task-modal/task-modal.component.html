@@ -134,11 +134,20 @@
         <span class="badge-peripheral">Periférico Cámara</span>
       </div>
 
-      @if (photoUrl) {
+      <!-- Selector de archivo HTML nativo como respaldo directo -->
+      <input
+        type="file"
+        #filePicker
+        accept="image/*"
+        (change)="onFileSelected($event)"
+        style="display: none"
+      />
+
+      @if (photoUrl()) {
         <div class="photo-preview-container">
-          <img [src]="photoUrl" alt="Evidencia capturada con cámara" class="photo-preview-img" />
+          <img [src]="photoUrl()" alt="Evidencia capturada con cámara" class="photo-preview-img" />
           <div class="photo-overlay-actions">
-            <button type="button" class="btn-photo-action change" (click)="capturePhoto()" [disabled]="isCapturingPhoto">
+            <button type="button" class="btn-photo-action change" (click)="presentPhotoOptions()" [disabled]="isCapturingPhoto()">
               <ion-icon name="camera-outline"></ion-icon> Cambiar
             </button>
             <button type="button" class="btn-photo-action delete" (click)="removePhoto()">
@@ -147,20 +156,33 @@
           </div>
         </div>
       } @else {
-        <button
-          type="button"
-          class="peripheral-btn camera-btn"
-          (click)="capturePhoto()"
-          [disabled]="isCapturingPhoto"
-        >
-          @if (isCapturingPhoto) {
-            <ion-spinner name="crescent" class="btn-spinner"></ion-spinner>
-            <span>Accediendo a la cámara...</span>
-          } @else {
-            <ion-icon name="camera-outline" class="btn-icon"></ion-icon>
-            <span>Tomar Foto / Adjuntar Evidencia</span>
-          }
-        </button>
+        <div class="camera-actions-row">
+          <button
+            type="button"
+            class="peripheral-btn camera-btn"
+            (click)="presentPhotoOptions()"
+            [disabled]="isCapturingPhoto()"
+          >
+            @if (isCapturingPhoto()) {
+              <ion-spinner name="crescent" class="btn-spinner"></ion-spinner>
+              <span>Accediendo a cámara...</span>
+            } @else {
+              <ion-icon name="camera-outline" class="btn-icon"></ion-icon>
+              <span>Tomar Foto / Adjuntar Evidencia</span>
+            }
+          </button>
+
+          <!-- Botón de respaldo rápido para seleccionar imagen -->
+          <button
+            type="button"
+            class="btn-file-fallback"
+            (click)="filePicker.click()"
+            [disabled]="isCapturingPhoto()"
+            title="Seleccionar archivo desde el explorador"
+          >
+            <ion-icon name="cloud-upload-outline"></ion-icon>
+          </button>
+        </div>
       }
     </div>
 
@@ -174,17 +196,17 @@
         <span class="badge-peripheral">Periférico GPS</span>
       </div>
 
-      @if (location) {
+      @if (location()) {
         <div class="location-card-preview">
           <div class="loc-icon-col">
             <ion-icon name="navigate-outline" class="loc-pin"></ion-icon>
           </div>
           <div class="loc-text-col">
-            <span class="loc-title">{{ location.address || 'Ubicación GPS fijada' }}</span>
+            <span class="loc-title">{{ location()?.address || 'Ubicación GPS fijada' }}</span>
             <span class="loc-coords">
-              Lat: {{ location.latitude | number:'1.4-4' }}, Lon: {{ location.longitude | number:'1.4-4' }}
-              @if (location.accuracy) {
-                · ±{{ location.accuracy }}m
+              Lat: {{ location()?.latitude | number:'1.4-4' }}, Lon: {{ location()?.longitude | number:'1.4-4' }}
+              @if (location()?.accuracy) {
+                · ±{{ location()?.accuracy }}m
               }
             </span>
           </div>
@@ -197,9 +219,9 @@
           type="button"
           class="peripheral-btn location-btn"
           (click)="captureLocation()"
-          [disabled]="isCapturingLocation"
+          [disabled]="isCapturingLocation()"
         >
-          @if (isCapturingLocation) {
+          @if (isCapturingLocation()) {
             <ion-spinner name="crescent" class="btn-spinner"></ion-spinner>
             <span>Obteniendo coordenadas GPS...</span>
           } @else {
