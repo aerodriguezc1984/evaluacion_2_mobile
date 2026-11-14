@@ -73,7 +73,9 @@ describe('CameraService (Pruebas Automatizadas de Periférico Cámara)', () => {
 
     expect(Camera.getPhoto).toHaveBeenCalledWith(
       expect.objectContaining({
-        quality: 80,
+        quality: 65,
+        width: 1024,
+        height: 1024,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Prompt
       })

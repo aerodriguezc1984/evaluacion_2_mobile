@@ -74,7 +74,8 @@ describe('LocationService (Pruebas Automatizadas de Periférico GPS)', () => {
 
     expect(Geolocation.getCurrentPosition).toHaveBeenCalledWith(
       expect.objectContaining({
-        enableHighAccuracy: true
+        enableHighAccuracy: false,
+        timeout: 3500
       })
     );
     expect(result.location).toBeDefined();

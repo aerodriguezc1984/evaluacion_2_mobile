@@ -53,12 +53,23 @@ export class LocationService {
         }
       }
 
-      // 2. Consulta de coordenadas con alta precisión y timeout controlado
-      const position: Position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 5000
-      });
+      // 2. Consulta de coordenadas con estrategia de alto rendimiento (Fast-First)
+      // Primero intenta posición rápida por red/Wi-Fi/caché (responde en < 400ms)
+      let position: Position;
+      try {
+        position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: 3500,
+          maximumAge: 60000
+        });
+      } catch {
+        // Respaldo con sensor GPS satelital
+        position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 6000,
+          maximumAge: 30000
+        });
+      }
 
       const lat = position.coords.latitude;
       const lon = position.coords.longitude;
@@ -66,13 +77,13 @@ export class LocationService {
 
       let address: string | undefined = undefined;
 
-      // 3. Geocodificación inversa para traducir coordenadas a dirección humana
+      // 3. Geocodificación inversa con timeout controlado para no retrasar la experiencia de usuario
       if (resolveAddress) {
         try {
           address = await this.reverseGeocode(lat, lon);
         } catch (geoErr) {
-          console.warn('No se pudo resolver la dirección textual:', geoErr);
-          address = `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+          console.warn('Geocodificación inversa omitida o lenta:', geoErr);
+          address = `Ubicación GPS (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
         }
       }
 
@@ -107,36 +118,44 @@ export class LocationService {
    */
   async reverseGeocode(lat: number, lon: number): Promise<string> {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'TaskFlowApp-IonicEvaluation2/1.0'
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'TaskFlowApp-IonicEvaluation2/1.0'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}`);
       }
-    });
 
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
+      const data = await response.json();
+      if (data && data.address) {
+        const road = data.address.road || data.address.pedestrian || data.address.suburb || '';
+        const houseNumber = data.address.house_number ? ` ${data.address.house_number}` : '';
+        const city = data.address.city || data.address.town || data.address.village || data.address.county || '';
+        const state = data.address.state || '';
 
-    const data = await response.json();
-    if (data && data.address) {
-      const road = data.address.road || data.address.pedestrian || data.address.suburb || '';
-      const houseNumber = data.address.house_number ? ` ${data.address.house_number}` : '';
-      const city = data.address.city || data.address.town || data.address.village || data.address.county || '';
-      const state = data.address.state || '';
+        const parts = [
+          road ? `${road}${houseNumber}` : '',
+          city,
+          state
+        ].filter(Boolean);
 
-      const parts = [
-        road ? `${road}${houseNumber}` : '',
-        city,
-        state
-      ].filter(Boolean);
-
-      if (parts.length > 0) {
-        return parts.join(', ');
+        if (parts.length > 0) {
+          return parts.join(', ');
+        }
       }
-    }
 
-    return data.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      return data.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**

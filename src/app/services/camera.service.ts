@@ -54,9 +54,12 @@ export class CameraService {
         }
       }
 
-      // 2. Ejecutar captura optimizada para dispositivos móviles (calidad 80 para balance entre nitidez y tamaño)
+      // 2. Ejecutar captura optimizada para alto rendimiento móvil y web
+      // Limitar resolución a 1024px y calidad 65 para procesamiento instantáneo (< 200ms)
       const image = await Camera.getPhoto({
-        quality: 80,
+        quality: 65,
+        width: 1024,
+        height: 1024,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source,
