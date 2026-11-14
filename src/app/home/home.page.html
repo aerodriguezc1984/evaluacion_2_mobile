@@ -1,0 +1,392 @@
+<ion-header class="ion-no-border main-header">
+  <ion-toolbar class="main-toolbar">
+    <div class="brand-container">
+      <div class="brand-avatar">
+        <ion-icon name="checkmark-done-outline"></ion-icon>
+      </div>
+      <div class="brand-info">
+        <span class="brand-tag">EVALUACIÓN MÓVIL</span>
+        <h1 class="brand-title">TaskFlow <span>Pro</span></h1>
+      </div>
+    </div>
+
+    <ion-buttons slot="end">
+      <!-- Botón de Ordenamiento Rápido -->
+      <ion-button (click)="cycleSort()" class="toolbar-icon-btn" title="Cambiar orden">
+        <ion-icon slot="icon-only" name="swap-vertical-outline"></ion-icon>
+      </ion-button>
+
+      <!-- Botón para recargar datos de prueba -->
+      <ion-button (click)="resetDemoData()" class="toolbar-icon-btn" title="Restablecer tareas">
+        <ion-icon slot="icon-only" name="refresh-outline"></ion-icon>
+      </ion-button>
+
+      <!-- Botón de Usuario / Cerrar Sesión -->
+      <ion-button (click)="confirmLogout()" class="toolbar-user-btn" title="Cerrar sesión">
+        <div class="user-chip-mini">
+          <span class="user-initials">{{ getUserInitials() }}</span>
+        </div>
+        <ion-icon slot="icon-only" name="log-out-outline" class="logout-icon-mini"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="main-content" [fullscreen]="true">
+  <div class="content-wrapper">
+    <!-- PANEL DE PROGRESO / ESTADÍSTICAS -->
+    <section class="progress-section">
+      <div class="progress-card">
+        <div class="progress-header">
+          <div>
+            <span class="progress-subtitle">
+              @if (authService.currentUser()?.name) {
+                ¡Hola, {{ authService.currentUser()?.name }}! 👋
+              } @else {
+                Resumen de Actividad
+              }
+            </span>
+            <h2 class="progress-title">
+              @if (taskService.pendingCount() === 0 && taskService.totalCount() > 0) {
+                ¡Todo listo por hoy! 🚀
+              } @else {
+                {{ taskService.pendingCount() }} tareas por completar
+              }
+            </h2>
+          </div>
+          <div class="progress-percentage-pill">
+            {{ taskService.completionPercentage() }}%
+          </div>
+        </div>
+
+        <div class="progress-bar-container">
+          <div
+            class="progress-bar-fill"
+            [style.width.%]="taskService.completionPercentage()"
+          ></div>
+        </div>
+
+        <!-- KPI Mini Cards -->
+        <div class="stats-row">
+          <div class="stat-box" (click)="statusFilter.set('all')" [class.active-stat]="statusFilter() === 'all'">
+            <span class="stat-number total-color">{{ taskService.totalCount() }}</span>
+            <span class="stat-label">Totales</span>
+          </div>
+
+          <div class="stat-box" (click)="statusFilter.set('pending')" [class.active-stat]="statusFilter() === 'pending'">
+            <span class="stat-number pending-color">{{ taskService.pendingCount() }}</span>
+            <span class="stat-label">Pendientes</span>
+          </div>
+
+          <div class="stat-box" (click)="statusFilter.set('completed')" [class.active-stat]="statusFilter() === 'completed'">
+            <span class="stat-number completed-color">{{ taskService.completedCount() }}</span>
+            <span class="stat-label">Completadas</span>
+          </div>
+        </div>
+
+        <!-- BARRA DE SERVICIOS WEB Y APIS -->
+        <div class="cloud-sync-bar">
+          <div class="cloud-sync-info">
+            <span class="sync-status-indicator" [class.all-synced]="taskService.unsyncedCount() === 0">
+              <ion-icon [name]="taskService.unsyncedCount() === 0 ? 'cloud-done-outline' : 'cloud-upload-outline'"></ion-icon>
+              {{ taskService.unsyncedCount() === 0 ? 'Todo sincronizado con la nube' : taskService.unsyncedCount() + ' pendiente(s) de sincronizar' }}
+            </span>
+          </div>
+
+          <div class="cloud-sync-buttons">
+            <!-- Botón Importar desde API REST -->
+            <button
+              type="button"
+              class="api-pill-btn import-pill"
+              (click)="importFromExternalApi()"
+              [disabled]="isImporting()"
+              title="Importar tareas de prueba desde API externa (JSONPlaceholder)"
+            >
+              @if (isImporting()) {
+                <ion-spinner name="crescent" class="mini-spinner"></ion-spinner>
+                <span>Importando...</span>
+              } @else {
+                <ion-icon name="cloud-download-outline"></ion-icon>
+                <span>Importar API</span>
+              }
+            </button>
+
+            <!-- Botón Sincronizar en la Nube -->
+            <button
+              type="button"
+              class="api-pill-btn sync-pill"
+              (click)="syncPendingTasksWithCloud()"
+              [disabled]="isSyncing()"
+              title="Sincronizar tareas locales con el servicio web"
+            >
+              @if (isSyncing()) {
+                <ion-spinner name="crescent" class="mini-spinner"></ion-spinner>
+                <span>Sincronizando...</span>
+              } @else {
+                <ion-icon name="sync-outline"></ion-icon>
+                <span>Sincronizar</span>
+                @if (taskService.unsyncedCount() > 0) {
+                  <span class="unsynced-badge">{{ taskService.unsyncedCount() }}</span>
+                }
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BARRA DE BÚSQUEDA -->
+    <section class="search-section">
+      <div class="search-wrapper">
+        <ion-searchbar
+          [ngModel]="searchQuery()"
+          (ionInput)="searchQuery.set($any($event).target.value)"
+          placeholder="Buscar tareas por título o nota..."
+          [debounce]="200"
+          show-clear-button="focus"
+          class="custom-searchbar"
+        ></ion-searchbar>
+      </div>
+    </section>
+
+    <!-- FILTRO SEGMENTADO (TODAS / PENDIENTES / COMPLETADAS) -->
+    <section class="segment-section">
+      <ion-segment
+        [value]="statusFilter()"
+        (ionChange)="statusFilter.set($any($event).detail.value)"
+        class="custom-segment"
+      >
+        <ion-segment-button value="all">
+          <ion-label>Todas ({{ taskService.totalCount() }})</ion-label>
+        </ion-segment-button>
+        <ion-segment-button value="pending">
+          <ion-label>Pendientes ({{ taskService.pendingCount() }})</ion-label>
+        </ion-segment-button>
+        <ion-segment-button value="completed">
+          <ion-label>Hechas ({{ taskService.completedCount() }})</ion-label>
+        </ion-segment-button>
+      </ion-segment>
+    </section>
+
+    <!-- CATEGORÍAS HORIZONTALES CON CHIPS -->
+    <section class="categories-scroll-section">
+      <div class="categories-track">
+        @for (cat of categories; track cat.id) {
+          <button
+            type="button"
+            class="filter-chip"
+            [class.active]="categoryFilter() === cat.id"
+            [style.--cat-tint]="cat.color"
+            (click)="categoryFilter.set(cat.id)"
+          >
+            <ion-icon [name]="cat.icon" class="chip-icon"></ion-icon>
+            <span>{{ cat.name }}</span>
+          </button>
+        }
+      </div>
+    </section>
+
+    <!-- ENCABEZADO DE LISTA Y ORDEN -->
+    <div class="list-header-bar">
+      <div class="list-title-wrap">
+        <h3 class="list-title">Lista de Tareas</h3>
+        <span class="list-counter">{{ filteredTasks().length }} resultado(s)</span>
+      </div>
+
+      <button type="button" class="sort-indicator-btn" (click)="cycleSort()">
+        <ion-icon name="swap-vertical-outline"></ion-icon>
+        <span>{{ getSortLabel() }}</span>
+      </button>
+    </div>
+
+    <!-- LISTA DE TAREAS -->
+    <section class="tasks-list-section">
+      @if (filteredTasks().length > 0) {
+        <div class="task-cards-list">
+          @for (task of filteredTasks(); track task.id) {
+            <div
+              class="task-card"
+              [class.task-is-completed]="task.completed"
+              [class.prio-alta-border]="task.priority === 'alta' && !task.completed"
+              (click)="openTaskDetail(task)"
+            >
+              <!-- Checkbox interactivo rápido -->
+              <div
+                class="checkbox-hitbox"
+                (click)="toggleTask(task, $event)"
+                role="checkbox"
+                [attr.aria-checked]="task.completed"
+                title="Marcar como completada/pendiente"
+              >
+                <div class="custom-checkbox" [class.checked]="task.completed">
+                  @if (task.completed) {
+                    <ion-icon name="checkmark-circle" class="check-icon"></ion-icon>
+                  } @else {
+                    <div class="uncheck-circle"></div>
+                  }
+                </div>
+              </div>
+
+              <!-- Contenido de la tarea -->
+              <div class="task-info">
+                <div class="task-headline">
+                  <h4 class="task-item-title" [class.strikethrough]="task.completed">
+                    {{ task.title }}
+                  </h4>
+                </div>
+
+                @if (task.description) {
+                  <p class="task-snippet" [class.snippet-faded]="task.completed">
+                    {{ task.description }}
+                  </p>
+                }
+
+                <!-- Metadatos: Categoría, Prioridad, Fecha -->
+                <div class="task-meta-row">
+                  <!-- Categoría -->
+                  <span class="meta-tag cat-tag" [style.--cat-color]="getCategoryColor(task.category)">
+                    {{ task.category }}
+                  </span>
+
+                  <!-- Prioridad -->
+                  <span
+                    class="meta-tag prio-tag"
+                    [class.prio-alta]="task.priority === 'alta'"
+                    [class.prio-media]="task.priority === 'media'"
+                    [class.prio-baja]="task.priority === 'baja'"
+                  >
+                    <span class="priority-dot"></span>
+                    {{ task.priority | uppercase }}
+                  </span>
+
+                  <!-- Fecha de vencimiento -->
+                  @if (task.dueDate) {
+                    <span
+                      class="meta-tag date-tag"
+                      [class.overdue]="isOverdue(task.dueDate, task.completed)"
+                      [class.today]="isToday(task.dueDate)"
+                    >
+                      <ion-icon name="calendar-outline"></ion-icon>
+                      {{ formatDate(task.dueDate) }}
+                    </span>
+                  }
+
+                  <!-- Evidencia fotográfica (Cámara) -->
+                  @if (task.photoUrl) {
+                    <span class="meta-tag photo-chip" title="Tiene foto de evidencia adjunta">
+                      <ion-icon name="camera-outline"></ion-icon>
+                      Foto
+                    </span>
+                  }
+
+                  <!-- Ubicación GPS -->
+                  @if (task.location) {
+                    <span
+                      class="meta-tag location-chip"
+                      (click)="openTaskLocation(task, $event)"
+                      title="Ubicación GPS registrada (Clic para ver en mapa)"
+                    >
+                      <ion-icon name="location-outline"></ion-icon>
+                      GPS
+                    </span>
+                  }
+
+                  <!-- Estado de sincronización Cloud -->
+                  @if (task.syncedWithCloud) {
+                    <span class="meta-tag cloud-chip synced" title="Sincronizada con el servicio web">
+                      <ion-icon name="cloud-done-outline"></ion-icon>
+                    </span>
+                  } @else {
+                    <span class="meta-tag cloud-chip pending" title="Pendiente de sincronizar">
+                      <ion-icon name="cloud-upload-outline"></ion-icon>
+                    </span>
+                  }
+                </div>
+              </div>
+
+              <!-- Acciones de edición y eliminación rápida -->
+              <div class="task-card-actions">
+                <!-- Modificar Tarea -->
+                <button
+                  type="button"
+                  class="action-icon-btn edit-btn"
+                  (click)="openEditTaskModal(task, $event)"
+                  title="Modificar tarea"
+                  aria-label="Modificar tarea"
+                >
+                  <ion-icon name="create-outline"></ion-icon>
+                </button>
+
+                <!-- Quitar Tarea -->
+                <button
+                  type="button"
+                  class="action-icon-btn delete-btn"
+                  (click)="confirmDeleteTask(task, $event)"
+                  title="Quitar tarea"
+                  aria-label="Quitar tarea"
+                >
+                  <ion-icon name="trash-outline"></ion-icon>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <!-- ESTADO VACÍO (EMPTY STATE) -->
+        <div class="empty-state-box">
+          <div class="empty-icon-circle">
+            <ion-icon name="sparkles-outline"></ion-icon>
+          </div>
+          <h4 class="empty-title">No se encontraron tareas</h4>
+          <p class="empty-desc">
+            @if (searchQuery()) {
+              No hay tareas que coincidan con "{{ searchQuery() }}".
+            } @else if (statusFilter() !== 'all') {
+              No tienes tareas en esta categoría de estado.
+            } @else {
+              ¡Excelente trabajo! No tienes tareas registradas actualmente.
+            }
+          </p>
+
+          <div class="empty-actions">
+            @if (searchQuery() || statusFilter() !== 'all' || categoryFilter() !== 'all') {
+              <ion-button
+                fill="outline"
+                size="small"
+                (click)="searchQuery.set(''); statusFilter.set('all'); categoryFilter.set('all')"
+                class="btn-reset-filters"
+              >
+                Limpiar filtros
+              </ion-button>
+            }
+            <ion-button
+              size="small"
+              (click)="openAddTaskModal()"
+              class="btn-empty-add"
+            >
+              <ion-icon slot="start" name="add"></ion-icon>
+              Crear nueva tarea
+            </ion-button>
+          </div>
+        </div>
+      }
+    </section>
+
+    <!-- BOTÓN INFERIOR DE LIMPIAR COMPLETADAS SI HAY ALGUNA -->
+    @if (taskService.completedCount() > 0) {
+      <div class="clear-completed-wrap">
+        <button type="button" class="btn-clean-completed" (click)="confirmClearCompleted()">
+          <ion-icon name="trash-outline"></ion-icon>
+          <span>Limpiar {{ taskService.completedCount() }} tarea(s) completadas</span>
+        </button>
+      </div>
+    }
+  </div>
+
+  <!-- BOTÓN FLOTANTE (FAB) PARA AGREGAR TAREA -->
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed" class="custom-fab">
+    <ion-fab-button (click)="openAddTaskModal()" aria-label="Agregar nueva tarea" class="fab-btn">
+      <ion-icon name="add"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+</ion-content>
